@@ -1,0 +1,310 @@
+---
+title: "Project1 Statistical Computation"
+author: "Eyal Grinberg & Yam Rozen"
+date: "2023-04-01"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+Q1 - Ladders & Snakes
+
+An auxiliary function for summing digits.
+```{r}
+# the function receives a number and returns the final sum of it's digits. 
+
+calc_digits_sum <- function(num) {
+  digits <- as.numeric(strsplit(as.character(num), "")[[1]]) # from chatGPT: the function splits the number into its individual digits using the strsplit() function. It then converts each digit to a numeric type using the as.numeric() function.
+  curr_sum <- sum(digits)
+  if (curr_sum > 9) { # there's need to sum digits again
+    return(calc_digits_sum(curr_sum)) #recursion
+  }
+  return(curr_sum)
+}
+```
+
+data structures:
+```{r}
+# for checking ladders
+base_of_a_ladder_vec <- c(2,7,8,15,21,28,36,51,71,78,87)
+top_of_a_ladder_vec <- c(38,14,31,26,42,84,44,67,91,98,94)
+# for checking snakes
+head_of_a_snake_vec <- c(16,46,49,62,64,74,89,92,95,99)
+tail_of_a_snake_vec <- c(6,25,11,19,60,53,68,88,75,80)
+```
+
+An auxiliary function for checking if a square is a head of a snake or a base of a ladder.
+```{r}
+# the function receives a vector and a number and returns the index of the number in the vector if it exists, -1 otherwise.
+
+find_index_in_vec <- function(vec, num) {
+  index <- which(vec == num)
+  if(length(index) == 0) {
+    return(-1)
+  }
+  return(index)
+}
+```
+
+A function for one turn in the game.
+```{r}
+# receives the starting square as an argument.
+# returns the end square.
+
+perform_one_turn_Q1 <- function(start_square) {
+  dice_roll <- sample(1:6, 1)
+  mid_square <- dice_roll + start_square 
+  # check for exceeding 100
+  if (mid_square > 100) {
+    mid_square <- 100 - (mid_square - 100)
+  }
+  # check sum digits condition
+  if (calc_digits_sum(mid_square) == dice_roll) {
+    mid_square <- floor(mid_square / 2)
+  }
+  # check for a snake
+  index <- find_index_in_vec(head_of_a_snake_vec, mid_square)
+  if (index != -1) {
+    mid_square <- tail_of_a_snake_vec[index]
+  }
+  # check for a ladder
+  index <- find_index_in_vec(base_of_a_ladder_vec, mid_square)
+  if (index != -1) {
+    mid_square <- top_of_a_ladder_vec[index]
+  }
+  # at this point 'mid_square' is actually the end square of this turn.
+  return(mid_square)
+}
+```
+
+the main function for performing a full game and counting the number of dice rolls.
+```{r}
+perform_one_game_Q1 <- function() {
+  cnt <- 0
+  start_square <- 1
+  end_square <- -1
+  while (end_square != 100) {
+    end_square <- perform_one_turn_Q1(start_square)
+    start_square <- end_square
+    cnt <- cnt + 1
+  }
+  return (cnt)
+}
+```
+
+auxiliary function for CI calculation:
+```{r}
+calc_CI <- function(data, conf) {
+  alpha <- 1 - conf
+  q_z <- qnorm(1 - alpha/2)
+  n <- length(data)
+  avg <- mean(data)
+  sd <- sd(data)
+  upper <- avg + q_z * (sd / sqrt(n)) 
+  lower <- avg - q_z * (sd / sqrt(n)) 
+  CI <- c(lower, upper)
+  names(CI) <- c("Lower", "Upper")
+  return (CI)
+}
+```
+
+5000 games simulation:
+```{r}
+sim_results_Q1 <- replicate(5000, perform_one_game_Q1())
+```
+
+Mean and CI calculations:
+```{r}
+round(mean(sim_results_Q1), 3) # 3 digits after the decimal point as requested
+```
+
+```{r}
+round(calc_CI(sim_results_Q1, 0.95), 3)
+```
+
+
+
+Q2 - Tic Tac Toe
+
+```{r}
+# auxiliary function that checks if any of the players won after a move was made.
+# the input is the the last square that was played by one of the players as well as the board and it's size and the player.
+# the function returns 1 if X player has won.
+# the function returns 2 if O player has won.
+
+check_win <- function(player, board, size, square) {
+  # extract the relevant row and col number
+  row_index_of_square <- ceiling(square / size)
+  col_index_of_square <- -1
+  modulu_res <- square %% size
+  if (modulu_res) {
+    col_index_of_square <- modulu_res
+  }
+  else { # the column of square is a non-remainder multiple of size ---> should be the last column in the matrix.
+    col_index_of_square <- size
+  }
+  
+  col_match <- row_match <- primary_diag_match <- secondary_diag_match <- 0
+  # check rows and columns
+  for (i in 1:size) {
+    if (row_match == -1 && col_match == -1) {break} # there's no chance for a row/col match, stop searching.
+    if (row_match != -1) { # a little optimization, if we found a square in the row that doesn't match, we won't keep checking that row. 
+      if (board[row_index_of_square, i] == player) {row_match <- row_match + 1}
+      else {row_match <- -1}
+    }
+    if (col_match != -1) { # same optimization for columns
+      if (board[col_index_of_square, i] == player) {col_match <- col_match + 1}
+      else {col_match <- -1}
+    }
+  }
+  
+  # if the square is not on any of the diagonals, we only need to check the row and the col of the given square. otherwise we need to check also the diagonals.
+  if (row_index_of_square == col_index_of_square || 
+      col_index_of_square == size - row_index_of_square + 1) { # check if the square is on one of the two diagonals.
+  # same optimization for diagonals too.
+    for (i in 1:size) {
+      if (primary_diag_match == -1 && secondary_diag_match == -1) {break}
+      if (primary_diag_match != -1) { 
+        if (board[i, i] == player) {primary_diag_match <- primary_diag_match + 1}
+        else {primary_diag_match <- -1}
+      }
+      if (secondary_diag_match != 1) {
+        if (board[i, size - i + 1] == player) {secondary_diag_match <- secondary_diag_match + 1}
+        else {secondary_diag_match <- -1}
+      }
+    }
+  }
+  
+  if (row_match == size || col_match == size ||
+      primary_diag_match == size || secondary_diag_match == size) {
+    return (player) # should return 1 or 2, depends on which player played this turn
+  }
+  return(-1)
+}
+```
+
+One game function
+```{r}
+# the function returns 1 if X player has won, 2 if O player has won, and 0 if it's a tie
+
+perform_one_game_Q2 <- function(size) {
+  
+  board <- matrix(-1, size, size)
+  permuted_squares <- sample(c(1:(size^2))) # here all the "magic" happens, we created a permutation of the squares and each turn take a square sequentially from that vector instead of sampling in each iteration.
+  
+  i <- 1
+  while (i <= size^2) {
+    # X player's turn
+    board[ permuted_squares[i] ] <- 1
+    if (i >= 2 * size) { # need to check win condition only after size turns were played by each player 
+      win_check_res <- check_win(1, board, size, permuted_squares[i])
+      if (win_check_res != -1) { # game over
+        return(win_check_res)
+      }
+    }
+    i <- i + 1
+    if (i == size^2 + 1) {break} # if there's an odd number of squares the X player will play one more turn.
+    # O player's turn
+    board[ permuted_squares[i] ] <- 2
+    if (i >= 2 * size) { # need to check win condition only after 'size' turns were played 
+      win_check_res <- check_win(2, board, size, permuted_squares[i])
+      if (win_check_res != -1) { # game over
+        return(win_check_res)
+      }
+    }
+    i <- i + 1
+  }
+  # otherwise it's a tie
+  return(0)
+}
+```
+
+simulations:
+```{r}
+sim_size <- 5000
+# matrix initialization
+prob_mat <- matrix(nrow = 3, ncol = 15)
+row.names(prob_mat) <- c("Win probability X","Win probability O","Tie probability")
+colnames(prob_mat) <- c('3x3','4x4','5x5','6x6','7x7','8x8','9x9','10x10','11x11','12x12','13x13','14x14','15x15','25x25','50x50')
+# performing simulations
+for (i in 3:15) {
+  results_game_size_i <- replicate(sim_size, perform_one_game_Q2(i))
+  prob_mat[1,i-2] = mean(results_game_size_i == 1) # games that X has won returned 1
+  prob_mat[2,i-2] = mean(results_game_size_i == 2) # games that X has won returned 2
+  prob_mat[3,i-2] = mean(results_game_size_i == 0) # games that X has won returned 0
+}
+for (i in 1:2) {
+  results_game_size_i <- replicate(sim_size, perform_one_game_Q2(i*25))
+  prob_mat[1,i+13] = mean(results_game_size_i == 1) # games that X has won returned 1
+  prob_mat[2,i+13] = mean(results_game_size_i == 2) # games that X has won returned 2
+  prob_mat[3,i+13] = mean(results_game_size_i == 0) # games that X has won returned 0
+}
+prob_mat
+```
+
+```{r}
+board_size <- c(3:15,25,50)
+plot(x = board_size, y = prob_mat[1,], xlab = "Board size",
+     ylab = "Estimated win probability of X", col = "red", main = "Player X",lwd = 3, type = "b")
+plot(x = board_size, y = prob_mat[2,], xlab = "Board size",
+     ylab = "Estimated win probability of O", col = "blue", main = "Player O",lwd = 3, type = "b")
+plot(x = board_size, y = prob_mat[3,], xlab = "Board size",
+     ylab = "Estimated Tie probability", col = "orange", main = "Ties plot",lwd = 3, type = "b")
+```
+
+As shown in the plots, it seems that as the board size increases the tie probability increases too, and the probabilities that any of the two players will win go down towards 0.
+the intuition for it is that on a larger board the majority of the square permutations will end in a tie.
+
+
+Bonus Section - performing 5,000,000 simulations
+uncomment to run the simulations
+```{r}
+# # Set the number of simulations
+# n_sims <- 5000000
+# sim_result_size_25 <- vector("numeric", n_sims)
+# sim_result_size_50 <- vector("numeric", n_sims)
+# 
+# # Iterate over the simulations
+# for (i in 1:n_sims) {
+#   # Run the function for each simulation
+#   sim_result_size_25[i] <- perform_one_game_Q2(25)
+#   sim_result_size_50[i] <- perform_one_game_Q2(50)
+# 
+#   # Check if the current iteration is a multiple of 50,000
+#   if (i %% 50000 == 0) {
+#     # Print a message to indicate the progress of the simulation
+#     cat(i / 50000,"% of the simulations completed. \n")
+#   }
+# }
+# ```
+# Probabilities
+# ```{r}
+# # matrix initialization
+# prob_mat <- matrix(nrow = 3, ncol = 2)
+# row.names(prob_mat) <- c("Win probability X","Win probability O","Tie probability")
+# colnames(prob_mat) <- c('25x25','50x50')
+# 
+# # performing simulations
+# prob_mat[1,1] = mean(sim_result_size_25 == 1) # games that X has won returned 1
+# prob_mat[2,1] = mean(sim_result_size_25 == 2) # games that X has won returned 2
+# prob_mat[3,1] = mean(sim_result_size_25 == 0) # games that X has won returned 0
+#   
+# prob_mat[1,2] = mean(sim_result_size_50 == 1) # games that X has won returned 1
+# prob_mat[2,2] = mean(sim_result_size_50 == 2) # games that X has won returned 2
+# prob_mat[3,2] = mean(sim_result_size_50 == 0) # games that X has won returned 0
+# 
+# prob_mat
+```
+
+Plots
+```{r}
+# board_size <- c(25,50)
+# plot(x = board_size, y = prob_mat[1,], xlab = "Board size",
+#      ylab = "Estimated win probability of X", col = "red", main = "Player X",lwd = 3, type = "b")
+# plot(x = board_size, y = prob_mat[2,], xlab = "Board size",
+#      ylab = "Estimated win probability of O", col = "blue", main = "Player O",lwd = 3, type = "b")
+# plot(x = board_size, y = prob_mat[3,], xlab = "Board size",
+#      ylab = "Estimated Tie probability", col = "orange", main = "Ties plot",lwd = 3, type = "b")
+```
+As expected, for 5,000,000 simulations the estimators for the win probabilities of any player is 0 and for the tie probability is 1. 
